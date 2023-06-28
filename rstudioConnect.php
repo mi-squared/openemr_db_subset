@@ -28,7 +28,7 @@ GRANT GRANT OPTION ON analytics.* TO 'analytics'@'localhost';
 FLUSH PRIVILEGES;
  *
  */
-$test = true; //Will limit all queries to the first 100.
+$test = false; //Will limit all queries to the first 100.
 
 
 //the mySQL user that runs this script will be called analytics.  This user is creating a
@@ -36,7 +36,7 @@ $user = 'analytics';
 $password = 'mi2AnalyticUser';
 $host = 'localhost';
 $targetDatabase=  'analytics';
-$sourceDatabase = 'peds_700';
+$sourceDatabase = 'openemr';
 
 //create a connection as root to the instance of mySQL
 $conn = new mysqli($host, $user, $password);

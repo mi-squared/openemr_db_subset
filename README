@@ -1,0 +1,22 @@
+There are two files that are used for installing the ability to have an RSuite CLient access a database.  There are a few things that need to happen:
+
+1) First.  We need SSH Keys on the server if we are trying to connect with a remote server
+
+2) We need ssh access to run the rstudioConnectGrantPriv.sql file.  This file only needs to be run once as root or a root user. This script will
+create a user called analytics that will be granted read-only access to the production database.  If the database is not called 'openemr' line 2 of this script
+will need to be changed.  We can run this script by using the following from a command line in bash or we can copy-and-paste into
+the mySQL terminal. Running this script allows the rstudioConnect run nightly so the rstudio clinent can have read only access to the analytic database.
+The anayltic database is what rstudio user has read-only access to.
+
+3) The cronjob rstudioConnect.php will query the production database.  If your database is not called openemr, find the
+line "$sourceDatabase = 'openemr';" and change openemr with the name of the database you need.
+
+To add more tables we can change the line:
+$tableNames = [ 'form_vitals', 'form_encounter', 'form_observation', 'form_questionnaire_assessments'];
+
+to include the table names that should be included in the anonymous table.  If by chance a table name is
+misspelled or non-existent, the script will print a warning to the log.
+
+---
+
+The rstudio user will have to use the sshkey that is stored on the remote server.
