@@ -53,7 +53,7 @@ $showQuery = "SHOW DATABASES";
 $dropQuery = "Drop DATABASE $targetDatabase";
 $createDatabase = "Create DATABASE $targetDatabase";
 $searchUser = 'SELECT User FROM mysql.db WHERE Db = "$targetDatabase" AND User = "rstudio"';
-$createUser = "CREATE USER 'rstudio'@'localhost' IDENTIFIED BY 'mi2AnalyticUser'; ";
+$createUser = "CREATE USER 'rstudio'@'localhost' IDENTIFIED BY ''; ";
 $grantUser = "GRANT SELECT ON $targetDatabase.* TO 'rstudio'@'localhost'; ";
 $flush = "Flush Privileges;";
 
@@ -154,7 +154,7 @@ if ($result) {
 
 //handle the vitals!
 
-$tableNames = [ 'form_vitals', 'form_encounter', 'form_observation', 'form_questionnaire_assessments'];
+$tableNames = [ 'form_vitals', 'form_encounter', 'form_observation', 'form_questionnaire_assessments', 'questionnaire_response'];
 foreach($tableNames as $tableName){
     $result = $conn->query("SHOW COLUMNS FROM $sourceDatabase.$tableName");
 

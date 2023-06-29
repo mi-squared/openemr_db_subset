@@ -1,4 +1,4 @@
-CREATE USER IF NOT EXISTS 'analytics'@'localhost' IDENTIFIED BY 'mi2AnalyticUser';
+CREATE USER IF NOT EXISTS 'analytics'@'localhost' IDENTIFIED BY '';
 GRANT SELECT ON openemr.* TO 'analytics'@'localhost';
 GRANT ALL PRIVILEGES ON `analytics`.* TO 'analytics'@'localhost';
 GRANT SELECT ON analytics.* TO 'rstudio'@'localhost';
