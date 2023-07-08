@@ -36,7 +36,8 @@ $user = 'analytics';
 $password = 'mi2AnalyticUser';
 $host = 'localhost';
 $targetDatabase=  'analytics';
-$sourceDatabase = 'openemr';
+$sourceDatabase = 'peds_700';
+$logfile = '/var/log/rstudioconnect.log';
 
 //create a connection as root to the instance of mySQL
 $conn = new mysqli($host, $user, $password);
@@ -44,15 +45,18 @@ $conn = new mysqli($host, $user, $password);
 // Check the connection
 if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
+    file_put_contents($logfile, date('Y-m-d h:i:s') . " " . $conn->connect_error . PHP_EOL, FILE_APPEND);
 } else {
     echo date('Y-m-d h:i:s') . "\nConnection to mySQL server successful as user: $user \nconnected to database: $targetDatabase  \n";
+    file_put_contents($logfile, date('Y-m-d h:i:s') . "Connection to mySQL server successful as user: 
+    $user \nsource data:$sourceDatabase\n target data: $targetDatabase " . PHP_EOL, FILE_APPEND);
 }
 
 //Here we do all the permission stuff
 $showQuery = "SHOW DATABASES";
 $dropQuery = "Drop DATABASE $targetDatabase";
 $createDatabase = "Create DATABASE $targetDatabase";
-$searchUser = 'SELECT User FROM mysql.db WHERE Db = "$targetDatabase" AND User = "rstudio"';
+$searchUser = "SELECT User FROM mysql.db WHERE Db = '$targetDatabase' AND User = 'rstudio'";;
 $createUser = "CREATE USER 'rstudio'@'localhost' IDENTIFIED BY ''; ";
 $grantUser = "GRANT SELECT ON $targetDatabase.* TO 'rstudio'@'localhost'; ";
 $flush = "Flush Privileges;";
@@ -65,6 +69,7 @@ $createPatientDataTable = "CREATE TABLE patient_data (
 
 //get the pid, dob from patient_data.
 $selectPatientDataQuery = "select pid, dob from $sourceDatabase.patient_data ";
+
 if($test){
     $selectPatientDataQuery .= " limit 100";
 }
@@ -100,11 +105,13 @@ if($result) {
 $result = $conn->query($searchUser);
 if ($result->num_rows > 0) {
     echo "User 'rstudio' already exists. Proceeding.... \n";
+    file_put_contents($logfile, date('Y-m-d h:i:s') . " User 'rstudio' already exists. Proceeding...." . " ". PHP_EOL, FILE_APPEND);
 
 } else {
     // Create the user
     $result = $conn->query($createUser);
     echo "User 'rstudio' created successfully. \n";
+    file_put_contents($logfile, date('Y-m-d h:i:s') . " User 'rstudio' created successfully." . " ". PHP_EOL, FILE_APPEND);
 }
 //set permissions for rstudio client to only have read-only permissions of the analytic database
 $result = $conn -> query("Use $targetDatabase"); //Logged in as
@@ -121,6 +128,7 @@ if ($conn->query($createPatientDataTable) === TRUE) {
 $result = $conn->query($selectPatientDataQuery);
 if ($result->num_rows > 0) {
     echo("Inserting data into patient_data... \n");
+    file_put_contents($logfile, date('Y-m-d h:i:s') . " Starting patient_data "  . PHP_EOL, FILE_APPEND);
     $stmt = $conn->prepare("INSERT INTO $targetDatabase.patient_data (pid, dob) VALUES (?, ?)");
     $stmt->bind_param("is", $pid, $dob);
 
@@ -133,6 +141,7 @@ if ($result->num_rows > 0) {
 
     // Close the statement
     $stmt->close();
+
 
 } else {
     die( "Error getting data: " . $conn->error . "\n\n");
@@ -196,6 +205,7 @@ foreach($tableNames as $tableName){
 
 // Check if the select query was successful
     if ($result) {
+        file_put_contents($logfile, date('Y-m-d h:i:s') . " Inserting $tableName " . " ". PHP_EOL, FILE_APPEND);
         echo "Inserting $tableName \n";
         $insertQuery = "INSERT INTO `$targetDatabase`.`$tableName` VALUES (";
         for ($i = 0; $i < $result->field_count; $i++) {
@@ -215,6 +225,9 @@ foreach($tableNames as $tableName){
 
 
         }
+
+        file_put_contents($logfile, date('Y-m-d h:i:s') . " Completed $tableName " . " ". PHP_EOL, FILE_APPEND);
+
     }
 
 }
