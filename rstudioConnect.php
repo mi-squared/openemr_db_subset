@@ -28,16 +28,27 @@ GRANT GRANT OPTION ON analytics.* TO 'analytics'@'localhost';
 FLUSH PRIVILEGES;
  *
  */
-$test = false; //Will limit all queries to the first 100.
+$test = 0; //Will limit all queries to the first 100.
 
 
 //the mySQL user that runs this script will be called analytics.  This user is creating a
 $user = 'analytics';
-$password = 'mi2AnalyticUser';
+$password = '';
 $host = 'localhost';
 $targetDatabase=  'analytics';
-$sourceDatabase = 'peds_700';
+$sourceDatabase = '';
 $logfile = '/var/log/rstudioconnect.log';
+
+//Here we do all the permission stuff
+$showQuery = "SHOW DATABASES";
+$dropQuery = "Drop DATABASE $targetDatabase";
+$createDatabase = "Create DATABASE $targetDatabase";
+$searchUser = "SELECT User FROM mysql.db WHERE Db = '$targetDatabase' AND User = 'rstudio'";;
+$createUser = "CREATE USER 'rstudio'@'localhost' IDENTIFIED BY ''; ";
+$grantUser = "GRANT SELECT ON $targetDatabase.* TO 'rstudio'@'localhost'; ";
+$flush = "Flush Privileges;";
+
+$tableNames = [ 'form_vitals', 'form_encounter', 'form_observation', 'form_questionnaire_assessments', 'questionnaire_response'];
 
 //create a connection as root to the instance of mySQL
 $conn = new mysqli($host, $user, $password);
@@ -52,15 +63,8 @@ if ($conn->connect_error) {
     $user \nsource data:$sourceDatabase\n target data: $targetDatabase " . PHP_EOL, FILE_APPEND);
 }
 
-//Here we do all the permission stuff
-$showQuery = "SHOW DATABASES";
-$dropQuery = "Drop DATABASE $targetDatabase";
-$createDatabase = "Create DATABASE $targetDatabase";
-$searchUser = "SELECT User FROM mysql.db WHERE Db = '$targetDatabase' AND User = 'rstudio'";;
-$createUser = "CREATE USER 'rstudio'@'localhost' IDENTIFIED BY ''; ";
-$grantUser = "GRANT SELECT ON $targetDatabase.* TO 'rstudio'@'localhost'; ";
-$flush = "Flush Privileges;";
-
+//allow invalid dates
+$result = $conn->query("SET SESSION sql_mode = 'ALLOW_INVALID_DATES';");
 //Here we place the queries
 $createPatientDataTable = "CREATE TABLE patient_data (
                 pid INT,
@@ -68,11 +72,7 @@ $createPatientDataTable = "CREATE TABLE patient_data (
             )  ";
 
 //get the pid, dob from patient_data.
-$selectPatientDataQuery = "select pid, dob from $sourceDatabase.patient_data ";
 
-if($test){
-    $selectPatientDataQuery .= " limit 100";
-}
 
 
 // Execute the query
@@ -113,41 +113,6 @@ if ($result->num_rows > 0) {
     echo "User 'rstudio' created successfully. \n";
     file_put_contents($logfile, date('Y-m-d h:i:s') . " User 'rstudio' created successfully." . " ". PHP_EOL, FILE_APPEND);
 }
-//set permissions for rstudio client to only have read-only permissions of the analytic database
-$result = $conn -> query("Use $targetDatabase"); //Logged in as
-
-//create the table using the query
-if ($conn->query($createPatientDataTable) === TRUE) {
-    echo "Table 'patient_data' created successfully. \n";
-
-} else {
-    die( "Error creating table: " . $conn->error . "\n\n");
-}
-
-//user analytic queries the source database for patient data
-$result = $conn->query($selectPatientDataQuery);
-if ($result->num_rows > 0) {
-    echo("Inserting data into patient_data... \n");
-    file_put_contents($logfile, date('Y-m-d h:i:s') . " Starting patient_data "  . PHP_EOL, FILE_APPEND);
-    $stmt = $conn->prepare("INSERT INTO $targetDatabase.patient_data (pid, dob) VALUES (?, ?)");
-    $stmt->bind_param("is", $pid, $dob);
-
-    // Process each row of data from OpenEMR and insert into Analytics
-    while ($row = $result->fetch_assoc()) {
-        $pid = $row["pid"];
-        $dob = $row["dob"];
-        $stmt->execute();
-    }
-
-    // Close the statement
-    $stmt->close();
-
-
-} else {
-    die( "Error getting data: " . $conn->error . "\n\n");
-}
-
-
 
 //grant the user rstudio the ability to have read access to analytics
 $result = $conn->query($grantUser);
@@ -160,76 +125,75 @@ $result = $conn->query($flush);
 if ($result) {
     echo "Flushed.  Permissions should work \n";
 }
+//set permissions for rstudio client to only have read-only permissions of the analytic database
+$result = $conn -> query("Use $targetDatabase"); //Logged in as
 
-//handle the vitals!
+//create the table using the query
+if ($conn->query($createPatientDataTable) === TRUE) {
+    echo "\nTable 'patient_data' created successfully. \n";
 
-$tableNames = [ 'form_vitals', 'form_encounter', 'form_observation', 'form_questionnaire_assessments', 'questionnaire_response'];
+} else {
+    die( "Error creating table: " . $conn->error . "\n\n");
+}
+
+//patient data
+$tempDir = "/var/lib/mysql-files/";
+$tempTable = "patient_data";
+if (file_exists($tempDir.$tempTable)) {
+    // Delete the file
+    if (!unlink($tempDir.$tempTable)) {
+        die("Error deleting the existing file: $tempDir.$tempTable");
+    } else{
+        echo "deleted $tempDir.$tempTable \n ";
+    }
+}
+
+$query = "SELECT pid, dob INTO OUTFILE '$tempDir$tempTable' 
+          FIELDS TERMINATED BY ',' 
+          OPTIONALLY ENCLOSED BY '\"' 
+          LINES TERMINATED BY '\n' 
+          FROM $sourceDatabase.patient_data where dob not like '%0000%'";
+if($test){
+    $query .= "  limit 10";
+}
+$exportResult = $conn->query($query);
+if (!$exportResult) {
+    die('Error exporting data from the source table to $tempDir: ' . $conn->error . "\n\n");
+    file_put_contents($logfile, date('Y-m-d h:i:s') . ' Error exporting data from the source table: ' . $conn->error . " ". PHP_EOL, FILE_APPEND);
+}
+
+$loadquery = "LOAD DATA INFILE '$tempDir$tempTable' 
+          INTO TABLE `$targetDatabase`.`patient_data` 
+          FIELDS TERMINATED BY ',' 
+          OPTIONALLY ENCLOSED BY '\"' 
+          LINES TERMINATED BY '\n'";
+
+$loadResult = $conn->query($loadquery);
+if (!$loadResult) {
+    echo('Error loading data into the destination table: ' .  $conn->error . "\n\n");
+} else{
+    echo("sucessfully leaded data into the destination table");
+}
+
+
+
 foreach($tableNames as $tableName){
-    $result = $conn->query("SHOW COLUMNS FROM $sourceDatabase.$tableName");
+    $query = "Create table  $targetDatabase.$tableName( Select * from $sourceDatabase.$tableName ";
+        if ($test) {
+         $query .= " limit 10";
+        }
+        $query .= " );";
 
-    if (!$result) {
-        echo("Error retrieving column information: " . $conn->error . "\n\n");
-        continue;
-    }
-
-    $columns = [];
-    while ($row = $result->fetch_assoc()) {
-        $columns[] = $row;
-    }
-
-    // Construct the CREATE TABLE query
-    $createTableQuery = "CREATE TABLE IF NOT EXISTS $tableName (  ";
-
-    foreach ($columns as $column) {
-        $columnName = $column['Field'];
-        $columnType = $column['Type'];
-        $createTableQuery .= "`$columnName` $columnType, ";
-    }
-
-    $createTableQuery = rtrim($createTableQuery, ", ");  // Remove the trailing comma and space
-    $createTableQuery .= ")";
-
-// Create the table in $targetDatabase
-    if (!$conn->query($createTableQuery)) {
-        die("Error creating table in $targetDatabase: " . $conn->error);
+    $exportResult = $conn->query($query);
+    if (!$exportResult) {
+        echo("Error exporting data from the source table to $sourceDatabase.$tableName: " . $conn->error . "\n\n");
+        file_put_contents($logfile, date('Y-m-d h:i:s') . ' Error exporting data from the source table: ' . $conn->error . " ". PHP_EOL, FILE_APPEND);
     } else {
-        echo("Created Table $targetDatabase \n");
-    }
-    $selectQuery = "SELECT * FROM $sourceDatabase.$tableName";
-    if($test) {
 
-        $selectQuery .= " Limit 100";
-    }
-// Execute the select query
-    $result = $conn->query($selectQuery);
-
-// Check if the select query was successful
-    if ($result) {
-        file_put_contents($logfile, date('Y-m-d h:i:s') . " Inserting $tableName " . " ". PHP_EOL, FILE_APPEND);
-        echo "Inserting $tableName \n";
-        $insertQuery = "INSERT INTO `$targetDatabase`.`$tableName` VALUES (";
-        for ($i = 0; $i < $result->field_count; $i++) {
-            $insertQuery .= ($i > 0 ? ", " : "") . "?";
-        }
-        $insertQuery .= ")";
-        $insertStmt = $conn->prepare($insertQuery);
-
-        while ($row = $result->fetch_assoc()) {
-            // Bind the values to the prepared statement parameters dynamically
-            $params = array_values($row);
-            $types = str_repeat("s", count($params));
-            $insertStmt->bind_param($types, ...$params);
-
-            // Execute the prepared statement
-            $insertResult = $insertStmt->execute();
-
-
-        }
-
-        file_put_contents($logfile, date('Y-m-d h:i:s') . " Completed $tableName " . " ". PHP_EOL, FILE_APPEND);
+        echo("Success importing data from the source table to : $sourceDatabase.$tableName: " . $conn->error . "\n\n");
+        file_put_contents($logfile, date('Y-m-d h:i:s') . ' Success exporting data from the source table: ' . $conn->error . " ". PHP_EOL, FILE_APPEND);
 
     }
-
 }
 
 

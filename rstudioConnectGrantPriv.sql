@@ -1,4 +1,4 @@
-CREATE USER IF NOT EXISTS 'analytics'@'localhost' IDENTIFIED BY '';
+CREATE USER IF NOT EXISTS 'analytics'@'localhost' IDENTIFIED BY 'analyticSpec3fic!!';
 GRANT SELECT ON openemr.* TO 'analytics'@'localhost';
 GRANT ALL PRIVILEGES ON `analytics`.* TO 'analytics'@'localhost';
 GRANT SELECT ON analytics.* TO 'rstudio'@'localhost';
@@ -8,4 +8,5 @@ GRANT ALL PRIVILEGES ON `analytics\_%`.* TO 'analytics'@'localhost';
 GRANT GRANT OPTION, CREATE USER ON *.* TO 'analytics'@'localhost';
 GRANT SELECT ON mysql.db TO 'analytics'@'localhost';
 GRANT RELOAD ON *.* TO 'analytics'@'localhost';
+GRANT FILE ON *.* TO 'analytics'@'localhost';
 FLUSH PRIVILEGES;
